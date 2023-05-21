@@ -1,0 +1,1077 @@
+---
+title: "MGMT 6203 Group Project"
+author: "MGMT6203 Team 26"
+output: html_notebook
+---
+### Preface
+
+Initial data joins and clean-up were done in Python prior to this work in R.
+In the case of missing graduation rates for a subset, the overall graduation
+rate was substituted in its place.
+
+In the case of missing teacher salary information or missing operational 
+expenditures, the row was dropped. Three rows were dropped for this.
+
+In the case of missing 'mean income if on public assistance', the imputation 
+value was the average of the column. This applied to 12 rows. 
+
+### Importing Data into R & Loading Required Packages
+```{r message=FALSE, warning=FALSE}
+# Loading R libraries used throughout this analysis
+library(ggplot2)
+library(dplyr)
+library(reshape)
+library(car)
+library(tidyverse)
+library(pls)
+library(randomForest)
+library(tibble)
+library(tidyr)
+library(dplyr)
+library(corrplot)
+
+options(max.print = 10000)  
+
+# File pathway where the datafile is stored
+path = "C:\\Users\\sudip\\OneDrive\\Desktop\\MGMT Project Data\\master_datafile.csv"
+
+# Loading the data from a csv file
+data_import <- read.csv(path, header=TRUE, stringsAsFactors=FALSE)
+# Dropping the column that contains a row index
+data_import <- subset(data_import, select=c(2:100))
+```
+
+### Data Dictionary
+
+If you were to look at the data imported, you would see 8 different dependent
+variables (the graduation rate for each school as well as graduation rates for
+key groups of students, e.g., hispanic students, economically disadvantaged
+students, female students, etc.) and 91 potential independent variables to use
+in our regression model. As the names for these variables can be quite long,
+an alias will be used in their place. The dictionary below provides a reference
+for what each variable references.
+
+y1 = GRAD_RATE_OVERALL,                                       
+y2 = GRAD_RATE_BLACK,                                        
+y3 = GRAD_RATE_ASIAN,                                         
+y4 = GRAD_RATE_HISPANIC,                                      
+y5 = GRAD_RATE_WHITE,                                         
+y6 = GRAD_RATE_ECONOMIC_DISADVANTAGE,                        
+y7 = GRAD_RATE_FEMALE,                                       
+y8 = GRAD_RATE_MALE,                                          
+x1 = TOTAL_OP_EXPENDITURE,                                   
+x2 = OP_EXPENDITURE_PER_STUDENT,                              
+x3 = FTE_COUNT,                                               
+x4 = TOTAL_SALARY_SPEND,                                     
+x5 = AVG_TEACHER_SALARY,                                      
+x6 = YEAR,                                                    
+x7 = TOTAL_POP,                                               
+x8 = PERCENT_URBAN,                                           
+x9 = PERCENT_RURAL,                                           
+x10 = TOTAL_HOUSING_AVAILABLE,                                 
+x11 = PERCENT_HOUSING_OCCUPIED,                                
+x12 = MOBILE_HOMES_PERCENTAGE_OF_HOUSING,                      
+x13 = PERCENTAGE_OF_HOMES_OWNER_OCCUPIED,  
+x14 = PERCENTAGE_OF_HOMES_RENTED,  
+x15 = AVERAGE_HOUSEHOLD_SIZE_OWNED,  
+x16 = AVERAGE_HOUSEHOLD_SIZE_RENTED,  
+x17 = PERCENT_OF_HOMES_W_NO_VEHICLE,  
+x18 = PERCENT_OF_HOMES_VALUED_LESS_THAN_50000,  
+x19 = PERCENT_OF_HOMES_VALUED_50000_to_99999,  
+x20 = PERCENT_OF_HOMES_VALUED_100000_TO_149999,  
+x21 = PERCENT_OF_HOMES_VALUED_150000_TO_199999,  
+x22 = PERCENT_OF_HOMES_VALUED_200000_TO_299999,  
+x23 = PERCENT_OF_HOMES_VALUED_300000_TO_499999,  
+x24 = PERCENT_OF_HOMES_VALUED_500000_TO_999999,  
+x25 = PERCENT_OF_HOMES_VALUED_1000000_OR_MORE,  
+x26 = MEDIAN_HOME_VALUE,  
+x27 = PERCENTAGE_OF_HOMES_W_MORTGAGE,  
+x28 = PERCENTAGE_OF_HOMES_W_NO_MORTGAGE,  
+x29 = PERCENTAGE_OF_RENTERS_PAYING_LESS_THAN_500,  
+x30 = PERCENTAGE_OF_RENTERS_PAYING_500_TO_999,  
+x31 = PERCENTAGE_OF_RENTERS_PAYING_1000_TO_1499,  
+x32 = PERCENTAGE_OF_RENTERS_PAYING_1500_TO_1999,  
+x33 = PERCENTAGE_OF_RENTERS_PAYING_2000_TO_2499,  
+x34 = PERCENTAGE_OF_RENTERS_PAYING_2500_TO_2999,  
+x35 = PERCENTAGE_OF_RENTERS_PAYING_3000_OR_MORE,  
+x36 = MEDIAN_RENT,  
+x37 = RENT_AS_PERCENT_OF_INCOME,  
+x38 = POP_16_YEAR_AND_OVER,  
+x39 = PERCENT_OF_LABOR_16_YEAR_AND_OVER,  
+x40 = PERCENT_UNEMPLOYED_16_YEAR_AND_OVER,  
+x41 = PERCENT_OF_LABOR_FEMALE_AND_16_AND_OVER,  
+x42 = PERCENT_EMPLOYED_FEMALE_AND_16_AND_OVER,  
+x43 = PERCENT_OF_HOMES_WITH_CHILDREN_UNDER_6_BOTH_PARENTS_WORK,  
+x44 = NUM_OF_HOMES_WITH_CHILDREN_6_TO_17_YEARS,  
+x45 = PERCENT_OF_HOMES_WITH_CHILDREN_6_TO_17_BOTH_PARENTS_WORK,  
+x46 = PERCENT_W_INCOME_LESS_THAN_10000,  
+x47 = PERCENT_W_INCOME_10000_TO_14999,  
+x48 = PERCENT_W_INCOME_15000_TO_24999,  
+x49 = PERCENT_W_INCOME_25000_To_34999,  
+x50 = PERCENT_W_INCOME_35000_TO_49999,  
+x51 = PERCENT_W_INCOME_50000_TO_74999,  
+x52 = PERCENT_W_INCOME_75000_TO_99999,  
+x53 = PERCENT_W_INCOME_100000_TO_149999,  
+x54 = PERCENT_W_INCOME_150000_TO_199999,  
+x55 = PERCENT_W_INCOME_200000_OR_MORE,  
+x56 = MEDIAN_HOUSEHOLD_INCOME,  
+x57 = MEAN_HOUSEHOLD_INCOME,  
+x58 = PERCENT_ON_SOCIAL_SECURITY,  
+x59 = PERCENT_HOUSEHOLDS_RETIRED,  
+x60 = PERCENT_RECIEVING_PUBLIC_ASSISTANCE,  
+x61 = MEAN_INCOME_IF_PUBLIC_ASSISTANCE,  
+x62 = PERCENT_RECEIVING_FOOD_STAMPS,  
+x63 = PERCENT_NO_HEALTH_INSURANCE,  
+x64 = PERCENT_CHILDREN_NO_HEALTH_INSURANCE,  
+x65 = PERCENT_FAMILIES_W_CHILDREN_BELOW_POVERTY,  
+x66 = PERCENT_POP_MALE,  
+x67 = PERCENT_POP_FEMALE,  
+x68 = PERCENT_POP_UNDER_5,   
+x69 = PERCENT_POP_5_TO_9,  
+x70 = PERCENT_POP_10_TO_14,  
+x71 = PERCENT_POP_15_TO_19,  
+x72 = PERCENT_POP_20_TO_24,  
+x73 = PERCENT_POP_25_34,  
+x74 = PERCENT_POP_35_TO_44,  
+x75 = PERCENT_POP_45_TO_54,  
+x76 = PERCENT_POP_55_TO_59,  
+x77 = PERCENT_POP_60_TO_64,  
+x78 = PERCENT_POP_65_TO_74,  
+x79 = PERCENT_POP_75_TO_84,  
+x80 = PERCENT_POP_85_OR_OLDER,  
+x81 = MEDIAN_POP_AGE,  
+x82 = PERCENT_POP_WHITE,  
+x83 = PERCENT_POP_BLACK,  
+x84 = PERCENT_POP_AMINDIAN_NATIVE,  
+x85 = PERCENT_POP_ASIAN,  
+x86 = PERCENT_POP_HAWAII_PAC_ISL,  
+x87 = PERCENT_POP_OTHER,  
+x88 = PERCENT_POP_HISPANIC,  
+x89 = DISTRICT_TYPE_Major.Suburban,  
+x90 = DISTRICT_TYPE_Major.Urban,  
+x91 = DISTRICT_TYPE_Non.metropolitan.Stable  
+
+                  
+```{r}
+# Rename all data columns as per the data dictionary
+
+data_import <- dplyr::rename(data_import, y1 = GRAD_RATE_OVERALL,
+y2 = GRAD_RATE_BLACK,                                        
+y3 = GRAD_RATE_ASIAN,                                         
+y4 = GRAD_RATE_HISPANIC,                                      
+y5 = GRAD_RATE_WHITE,                                         
+y6 = GRAD_RATE_ECONOMIC_DISADVANTAGE,                        
+y7 = GRAD_RATE_FEMALE,                                       
+y8 = GRAD_RATE_MALE,                                          
+x1 = TOTAL_OP_EXPENDITURE,                                   
+x2 = OP_EXPENDITURE_PER_STUDENT,                              
+x3 = FTE_COUNT,                                               
+x4 = TOTAL_SALARY_SPEND,                                     
+x5 = AVG_TEACHER_SALARY,                                      
+x6 = YEAR,                                                    
+x7 = TOTAL_POP,                                               
+x8 = PERCENT_URBAN,                                           
+x9 = PERCENT_RURAL,                                           
+x10 = TOTAL_HOUSING_AVAILABLE,                                 
+x11 = PERCENT_HOUSING_OCCUPIED,                                
+x12 = MOBILE_HOMES_PERCENTAGE_OF_HOUSING,                      
+x13 = PERCENTAGE_OF_HOMES_OWNER_OCCUPIED,
+x14 = PERCENTAGE_OF_HOMES_RENTED,
+x15 = AVERAGE_HOUSEHOLD_SIZE_OWNED,
+x16 = AVERAGE_HOUSEHOLD_SIZE_RENTED,
+x17 = PERCENT_OF_HOMES_W_NO_VEHICLE,
+x18 = PERCENT_OF_HOMES_VALUED_LESS_THAN_50000,
+x19 = PERCENT_OF_HOMES_VALUED_50000_to_99999,
+x20 = PERCENT_OF_HOMES_VALUED_100000_TO_149999,
+x21 = PERCENT_OF_HOMES_VALUED_150000_TO_199999,
+x22 = PERCENT_OF_HOMES_VALUED_200000_TO_299999,
+x23 = PERCENT_OF_HOMES_VALUED_300000_TO_499999,
+x24 = PERCENT_OF_HOMES_VALUED_500000_TO_999999,
+x25 = PERCENT_OF_HOMES_VALUED_1000000_OR_MORE,
+x26 = MEDIAN_HOME_VALUE,
+x27 = PERCENTAGE_OF_HOMES_W_MORTGAGE,
+x28 = PERCENTAGE_OF_HOMES_W_NO_MORTGAGE,
+x29 = PERCENTAGE_OF_RENTERS_PAYING_LESS_THAN_500,
+x30 = PERCENTAGE_OF_RENTERS_PAYING_500_TO_999,
+x31 = PERCENTAGE_OF_RENTERS_PAYING_1000_TO_1499,
+x32 = PERCENTAGE_OF_RENTERS_PAYING_1500_TO_1999,
+x33 = PERCENTAGE_OF_RENTERS_PAYING_2000_TO_2499,
+x34 = PERCENTAGE_OF_RENTERS_PAYING_2500_TO_2999,
+x35 = PERCENTAGE_OF_RENTERS_PAYING_3000_OR_MORE,
+x36 = MEDIAN_RENT,
+x37 = RENT_AS_PERCENT_OF_INCOME,
+x38 = POP_16_YEAR_AND_OVER,
+x39 = PERCENT_OF_LABOR_16_YEAR_AND_OVER,
+x40 = PERCENT_UNEMPLOYED_16_YEAR_AND_OVER,
+x41 = PERCENT_OF_LABOR_FEMALE_AND_16_AND_OVER,
+x42 = PERCENT_EMPLOYED_FEMALE_AND_16_AND_OVER,
+x43 = PERCENT_OF_HOMES_WITH_CHILDREN_UNDER_6_BOTH_PARENTS_WORK,
+x44 = NUM_OF_HOMES_WITH_CHILDREN_6_TO_17_YEARS,
+x45 = PERCENT_OF_HOMES_WITH_CHILDREN_6_TO_17_BOTH_PARENTS_WORK,
+x46 = PERCENT_W_INCOME_LESS_THAN_10000,
+x47 = PERCENT_W_INCOME_10000_TO_14999,
+x48 = PERCENT_W_INCOME_15000_TO_24999,
+x49 = PERCENT_W_INCOME_25000_To_34999,
+x50 = PERCENT_W_INCOME_35000_TO_49999,
+x51 = PERCENT_W_INCOME_50000_TO_74999,
+x52 = PERCENT_W_INCOME_75000_TO_99999,
+x53 = PERCENT_W_INCOME_100000_TO_149999,
+x54 = PERCENT_W_INCOME_150000_TO_199999,
+x55 = PERCENT_W_INCOME_200000_OR_MORE,
+x56 = MEDIAN_HOUSEHOLD_INCOME,
+x57 = MEAN_HOUSEHOLD_INCOME,
+x58 = PERCENT_ON_SOCIAL_SECURITY,
+x59 = PERCENT_HOUSEHOLDS_RETIRED,
+x60 = PERCENT_RECIEVING_PUBLIC_ASSISTANCE,
+x61 = MEAN_INCOME_IF_PUBLIC_ASSISTANCE,
+x62 = PERCENT_RECEIVING_FOOD_STAMPS,
+x63 = PERCENT_NO_HEALTH_INSURANCE,
+x64 = PERCENT_CHILDREN_NO_HEALTH_INSURANCE,
+x65 = PERCENT_FAMILIES_W_CHILDREN_BELOW_POVERTY,
+x66 = PERCENT_POP_MALE,
+x67 = PERCENT_POP_FEMALE,
+x68 = PERCENT_POP_UNDER_5,
+x69 = PERCENT_POP_5_TO_9,
+x70 = PERCENT_POP_10_TO_14,
+x71 = PERCENT_POP_15_TO_19,
+x72 = PERCENT_POP_20_TO_24,
+x73 = PERCENT_POP_25_34,
+x74 = PERCENT_POP_35_TO_44,
+x75 = PERCENT_POP_45_TO_54,
+x76 = PERCENT_POP_55_TO_59,
+x77 = PERCENT_POP_60_TO_64,
+x78 = PERCENT_POP_65_TO_74,
+x79 = PERCENT_POP_75_TO_84,
+x80 = PERCENT_POP_85_OR_OLDER,
+x81 = MEDIAN_POP_AGE,
+x82 = PERCENT_POP_WHITE,
+x83 = PERCENT_POP_BLACK,
+x84 = PERCENT_POP_AMINDIAN_NATIVE,
+x85 = PERCENT_POP_ASIAN,
+x86 = PERCENT_POP_HAWAII_PAC_ISL,
+x87 = PERCENT_POP_OTHER,
+x88 = PERCENT_POP_HISPANIC,
+x89 = DISTRICT_TYPE_Major.Suburban,
+x90 = DISTRICT_TYPE_Major.Urban,
+x91 = DISTRICT_TYPE_Non.metropolitan.Stable)
+```
+
+
+```{r}
+# Separate out the different dependent variables
+y_variables <- subset(data_import, select=c(1:8))
+# Separate out all the possible predictors
+x_variables <- subset(data_import, select=c(9:99))
+```
+### Checking the Distribution of the Target Variable
+
+Now, we check the distribution of our target variable (graduation rates). This 
+is done independently for each graduation rate subset (white graduation rate, 
+female graduation rate, etc.)
+
+```{r}
+ggplot(data=y_variables, aes(y1)) +
+  geom_histogram(aes(y =..density..), color="black", fill = "blue", bins=100) +
+  geom_density(alpha = 0.2, fill = "#FF6666") +
+  labs(x = "Overall Graduation Rate")
+
+ggplot(data=y_variables, aes(y2)) +
+  geom_histogram(aes(y =..density..), color="black", fill = "blue", bins=100) +
+  geom_density(alpha = 0.2, fill = "#FF6666") +
+  labs(x = "Graduation Rates for Black Students")
+
+ggplot(data=y_variables, aes(y3)) +
+  geom_histogram(aes(y =..density..), color="black", fill = "blue", bins=100) +
+  geom_density(alpha = 0.2, fill = "#FF6666") +
+  labs(x = "Graduation Rates for Asian Students")
+
+ggplot(data=y_variables, aes(y4)) +
+  geom_histogram(aes(y =..density..), color="black", fill = "blue", bins=100) +
+  geom_density(alpha = 0.2, fill = "#FF6666") +
+  labs(x = "Graduation Rates for Hispanic Students")
+
+ggplot(data=y_variables, aes(y5)) +
+  geom_histogram(aes(y =..density..), color="black", fill = "blue", bins=100) +
+  geom_density(alpha = 0.2, fill = "#FF6666") +
+  labs(x = "Graduation Rates for White Students")
+
+ggplot(data=y_variables, aes(y6)) +
+  geom_histogram(aes(y =..density..), color="black", fill = "blue", bins=100) +
+  geom_density(alpha = 0.2, fill = "#FF6666") +
+  labs(x = "Graduation Rates for Economically Disadvantaged Students")
+
+ggplot(data=y_variables, aes(y7)) +
+  geom_histogram(aes(y =..density..), color="black", fill = "blue", bins=100) +
+  geom_density(alpha = 0.2, fill = "#FF6666") +
+  labs(x = "Graduation Rates for Female Students")
+
+ggplot(data=y_variables, aes(y8)) +
+  geom_histogram(aes(y =..density..), color="black", fill = "blue", bins=100) +
+  geom_density(alpha = 0.2, fill = "#FF6666") +
+  labs(x = "Graduation Rates for Male Students")
+
+```
+### Tranformation of the Target Variable
+
+As can be observed, all the target variables show significant left-skew.
+This would suggest that a transformation would be appropriate. Traditional 
+transformations considered for a left-skewed data set include a log transform,
+a square root transform, or a cube root transform. Below, we see if any of these
+transformations make our dependent variable appear normally distributed.
+
+
+```{r}
+# Natural Log transformation
+log_grad_rates <- log(y_variables['y1'])
+
+ggplot(data=log_grad_rates, aes(y1)) +
+  geom_histogram(aes(y =..density..), color="black", fill = "blue", bins=100) +
+  geom_density(alpha = 0.2, fill = "#FF6666") +
+  labs(x = "Log(Overall Grad Rates)")
+
+# Square root transformation
+sqrt_grad_rates <- '^'(y_variables['y1'], 1/2)
+
+ggplot(data=sqrt_grad_rates, aes(y1)) +
+  geom_histogram(aes(y =..density..), color="black", fill = "blue", bins=100) +
+  geom_density(alpha = 0.2, fill = "#FF6666") +
+  labs(x = "SQRT(Overall Grad Rates)")
+
+# Cubed Root transformation
+cubert_grad_rates <- '^'(y_variables['y1'], 1/3)
+
+ggplot(data=cubert_grad_rates, aes(y1)) +
+  geom_histogram(aes(y =..density..), color="black", fill = "blue", bins=100) +
+  geom_density(alpha = 0.2, fill = "#FF6666") +
+  labs(x = "CUBED_RT(Overall Grad Rates)")
+```
+Regardless of the transformation used, the distribution of the dependent
+variable cannot be changed to a normal distribution. The left-skew is something
+that must be lived with and considered in the final analysis.
+
+### Checking Outliers Using Boxplots
+
+For each numerical variable, a boxplot was constructed to visualize the 
+distribution of that variable. If points lie beyond whispers, then outlier 
+values are present. However, the presence of an outlier does not automatically
+suggest a data point should be excluded from the overall data set.
+
+```{r}
+df <- subset(y_variables, select=c(1:4))
+colnames(df) <- c("Overall Grad Rate",
+                  "Grad Rate (Black)",
+                  "Grad Rate (Asian)",
+                  "Grad Rate (Hispanic)")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+
+
+```{r}
+df <- subset(x_variables, select=c(1:6))
+colnames(df) <- c("TOTAL OPERATING EXPENDITURE",                              
+      "OPER. EXPENDITURE PER STUDENT",                              
+      "NUMBER OF FULL TIME EMPLOYEES",                                               
+      "TOTAL SPEND ON TEACHER SALARY",                                     
+      "AVG TEACHER SALARY",
+      "YEAR")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+```{r}
+df <- subset(x_variables, select=c(7:12))
+colnames(df) <- c("TOTAL POPULATION",
+                  "% OF POP. - URBAN",
+                  "% OF POP. - RURAL",
+                  "TOTAL HOUSING AVAIL.",
+                  "% OF HOMES OCCUPIED",
+                  "MOBILE HOMES - % OF HOUSING")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+```{r}
+df <- subset(x_variables, select=c(13:18))
+colnames(df) <- c("% HOMES (OWNER OCCUPIED)",
+                  "% HOMES (RENTED)",
+                  "AVE. HOUSEHOLD SIZE (HOMEOWNER)",
+                  "AVE. HOUSEHOLD (RENTER)",
+                  "% HOMES W/ NO VEHICLE",
+                  "% HOMES: <$50K")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+```{r}
+df <- subset(x_variables, select=c(19:24))
+colnames(df) <- c("% HOMES: $50K - $99K",
+                  "% HOMES: $100K - $149K",
+                  "% HOMES: $150K - $199K",
+                  "% HOMES: $200K - $299K",
+                  "% HOMES: $300K - $499K",
+                  "% HOMES: $500K - $999K")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+```{r}
+df <- subset(x_variables, select=c(25:30))
+colnames(df) <- c("% HOMES: >=1M",
+                  "MEDIAN HOME VALUE",
+                  "% HOMES W MORTGAGE",
+                  "% HOMES W/O MORTGAGE",
+                  "% RENT: <$500",
+                  "% RENT: $500 - $999")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+```{r}
+df <- subset(x_variables, select=c(31:36))
+colnames(df) <- c("% RENT: $1000 - $1499",
+                  "% RENT: $1500 -$1999",
+                  "% RENT: $2000 - $2499",
+                  "% RENT: $2500 - $2999",
+                  "% RENT: >=$3000",
+                  "MEDIAN RENT")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+```{r}
+df <- subset(x_variables, select=c(37:42))
+colnames(df) <- c("RENT AS % OF INCOME",
+                  "% 16 YEAR AND OVER",
+                  "% LABOR 16 YEAR AND OVER",
+                  "% UNEMPLOYED",
+                  "% LABOR - FEMALE & 16+",
+                  "% EMPLOYED - FEMALE & 16+")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+```{r}
+df <- subset(x_variables, select=c(43:48))
+colnames(df) <- c("% HOMES W/ CHILD<6Y & WORKING PARENTS",
+                  "HOMES W/ CHILD 6-17Y",
+                  "HOMES W/CHILD 6-17Y & WORKING PARENTS",
+                  "% W/INCOME <$10k",
+                  "% W/INCOME $10K - $14K",
+                  "% W/INCOME $15K-$24K")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=7.5))
+```
+```{r}
+df <- subset(x_variables, select=c(49:54))
+colnames(df) <- c("% W/INCOME $25K - $34K",
+                  "% W/INCOM $35K - $49K",
+                  "% W/INCOME $50K - $74K",
+                  "% W/INCOME $75K - $99K",
+                  "% W/INCOME $100K - $149K",
+                  "% W/INCOME $150K - $199K")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+```{r}
+df <- subset(x_variables, select=c(55:60))
+colnames(df) <- c("% W/INCOME_$200K+",
+                  "MEDIAN HOUSEHOLD INCOME",
+                  "MEAN HOUSEHOLD INCOME",
+                  "% RECEIVING SOCIAL SECURITY",
+                  "% RETIRED",
+                  "% PUBLIC ASSISTANCE")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+```{r}
+df <- subset(x_variables, select=c(61:66))
+colnames(df) <- c("MEAN INCOME (IF PUBLIC ASSISTANCE)",
+                  "% RECEIVING FOOD STAMPS",
+                  "% W/O HEALTH INSURANCE",
+                  "% CHILDREN W/O HEALTH INSURANCE",
+                  "% HOMES W/CHILD BELOW POVERTY",
+                  "% POP. MALE")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+
+
+```{r}
+df <- subset(x_variables, select=c(67:72))
+colnames(df) <- c("% POP. FEMALE",
+                  "% POP. <5Y",
+                  "% POP. 5-9Y",
+                  "% POP. 10-14Y",
+                  "% POP. 15-19Y",
+                  "% POP. 20-24Y")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+
+
+```{r}
+df <- subset(x_variables, select=c(73:78))
+colnames(df) <- c("% POP. 25-34Y",
+                  "% POP. 35-44Y",
+                  "% POP. 45-54Y",
+                  "% POP. 55-59Y",
+                  "% POP. 60-64Y",
+                  "% POP. 65-74Y")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+
+
+```{r}
+df <- subset(x_variables, select=c(79:84))
+colnames(df) <- c("% POP. 75-84Y",
+                  "% POP. 85+Y",
+                  "MEDIAN AGE",
+                  "% POP. WHITE",
+                  "% POP. BLACK",
+                  "% POP. AMINDIAN/NATIVE")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+
+
+```{r}
+df <- subset(x_variables, select=c(85:88))
+colnames(df) <- c("% POP. ASIAN",
+                  "% POP. HAWAII/PI",
+                  "% POP. OTHER",
+                  "% POP. HISPANIC")
+meltData <- melt(df)
+p <- ggplot(meltData, aes(factor(variable), value))
+p + geom_boxplot() + facet_wrap(~variable, scale="free")+ theme(text=element_text(size=8))
+```
+
+Next, we create a correlation matrix in order to determine which predictors
+are heavily correlated.
+
+```{r include=FALSE}
+# Drop categorical variables from our set of predictors
+numerical_x_var <- subset(x_variables, select=c(1:88))
+cor(numerical_x_var)
+```
+From the correlation matrix, we find a few variables that are so strongly 
+correlated, they basically provide the same information. 
+
+**x8/x9  : -1.00 (% Urban, % Rural)  
+x13/x14: -1.00 (% Homes Owned, % Homes Rented)  
+x27/x28: -1.00 (% Homes w/Mortgage, % Homes w/o Mortgage)  
+x66/x67: -1.00 (% Pop. Male, % Pop. Female)**
+
+These inverse relationships are completely understandable as each variable pair
+is essentially the inverse of the other. The following variables are dropped
+as potential predictors: x8, x13, x27, x66.
+
+**x1/x3  :  0.999 (TOTAL_OP_EXPENDITURE, FTE_COUNT)    
+x1/x4  :  0.994 (TOTAL_OP_EXPENDITURE, TOTAL_SALARY_SPEND)  
+x3/x4  :  0.994 (FTE_COUNT, TOTAL_SALARY_SPEND)**
+
+We see that these three predictors track strongly to each other, which is
+a reasonable observance. If there isn't much variance in pay among employees,
+the total salary spend would effectively be the number of full-time employees
+(FTE) multiplied by the nominal salary. Similarly, if the operational 
+expenditures budget is dominated by the amount spent on employee salaries, 
+it would be understandable for these variables to also be strongly correlated.
+To simplify our model, the number of full-time employees variable will be kept
+while total_salary_soend and total_op_expenditures will be dropped.
+
+**x7/x38 :  0.995 (TOTAL_POP,POP_16_YEAR_AND_OVER)**
+
+This is a reasonable observation if fraction of the total population who are 
+adults is similar/identical across Austin. 
+
+**x41/x42:  0.989 (PERCENT_OF_LABOR_FEMALE_AND_16_AND_OVER,
+                 PERCENT_EMPLOYED_FEMALE_AND_16_AND_OVER)**
+
+Another reasonable observation. The number of adult women who are employed
+would reasonably track the number of adult women in the labor force. 
+In this case, x41 will be dropped and x42 will be kept as 'employed' is a 
+clearer descriptor than participating in the labor force, which has a number
+of caveats.
+
+**x55/x57:  0.978 (PERCENT_W_INCOME_200000_OR_MORE, MEAN_HOUSEHOLD_INCOME)**
+
+Austin is a relatively well-off city with a booming tech sector. These high
+income employees likely are skewing the mean household income.
+
+**x10/x38:  0.965 (TOTAL_HOUSING_AVAILABLE, POP_16_YEAR_AND_OVER)**
+
+The amount of housing available tracks with population. This seems an
+uncontroversial relationship. 
+
+**x56/x57:  0.951 (MEDIAN_HOUSEHOLD_INCOME, MEAN_HOUSEHOLD_INCOME)**
+
+The relationship between median and mean is well-explained.
+
+**x7/x10 :  0.950 (TOTAL_POP, TOTAL_HOUSING_AVAILABLE)**
+
+This relationship is similar to the one between x10/x38.
+
+**x15/x71:  0.940 (AVERAGE_HOUSEHOLD_SIZE_OWNED, PERCENT_POP_15_TO_19)**
+
+A reasonable hypothesis is that the average household size of a homeowner is
+related to the number of teenage children who still live at home. Conversely,
+parents of young children (who are generally  younger and earlier in their
+careers) may not be able to afford to own a home and still rent. This is an 
+interesting observation as we are considering high school graduation rates,
+where students are generally aged 15-19 years of age. This possibly suggests
+that those students are generally coming from income-stable homes in Austin.
+
+**x24/x26:  0.944 (PERCENT_OF_HOMES_VALUED_500000_TO_999999, MEDIAN_HOME_VALUE)**
+
+As mentioned earlier, Austin does have a booming tech sector and thus has 
+seen an influx of high-paid employees coming into the city. Able to afford 
+nicer, more expensive homes, they likely are skewing the median home value 
+upwards.
+
+**x78/x81:  0.947 (PERCENT_POP_65_TO_74, MEDIAN_POP_AGE)**
+
+Likely this indicates a significant elderly contingent in Austin, skewing the 
+median population age upwards.
+
+**x63/x65: -0.926 (PERCENT_NO_HEALTH_INSURANCE,
+                 PERCENT_FAMILIES_W_CHILDREN_BELOW_POVERTY)**
+                 
+While it is unsurprising that households that are below the poverty line are 
+also unable to afford health insurance for their adult members, it is notable
+that these variables do not also track with the percentage of uninsured
+children. Possibly children living in poverty are successful in being caught
+by state-wide safety nets?
+
+**x26/x55:  0.915 (MEDIAN_HOME_VALUE, PERCENT_W_INCOME_200000_OR_MORE)**
+
+People who earn more buy more expensive houses.
+
+**x12/x18:  0.907 (MOBILE_HOMES_PERCENTAGE_OF_HOUSING,
+                 PERCENT_OF_HOMES_VALUED_LESS_THAN_50000)**
+
+Homes in Austin are very expensive due to demand outstripping supply.
+It would appear that very cheap homes are largely of the mobile home
+variety.
+
+**x18/x64:  0.903 (PERCENT_OF_HOMES_VALUED_LESS_THAN_50000,
+                 PERCENT_CHILDREN_NO_HEALTH_INSURANCE)**
+
+The best hypothesis I have for this relationship is that within the working poor
+demographic, there is a population who makes too much money for social safety 
+nets (and thus can afford the lowest tier of home ownership) but insufficient 
+income to afford health insurance without assistance. 
+
+**x30/x36: -0.900 (PERCENTAGE_OF_RENTERS_PAYING_500_TO_999, MEDIAN_RENT)**
+
+The percentage of renters paying 500 to 999 dollars a month are numerous enough
+to skew the median rent value.
+
+**x55/x56:  0.905 (PERCENT_W_INCOME_200000_OR_MORE, MEDIAN_HOUSEHOLD_INCOME)**
+
+The richest Austinites are numerous enough to skew the median household income.
+
+**x64/x88:  0.909 (PERCENT_CHILDREN_NO_HEALTH_INSURANCE, PERCENT_POP_HISPANIC)**
+
+Any attempt to explain this relationship is pure conjecture and, more
+importantly, just makes me sad to think about.
+
+**x76/x81:  0.910 (PERCENT_POP_55_TO_59, MEDIAN_POP_AGE)**
+
+This age bracket consists of the oldest Gen X-ers and the youngest of the 
+Baby Boomers. Reasonbly, this would be senior managers, etc. within the working population. Apparently, they are numerous enough to skew the overall median age in Austin.
+
+In considering what variables to drop due to collinearity, aggregates of 
+multiple variables were favored over variables describing a sub-category
+(e.g., median age vs. percentage aged 65-74). In the end, the following
+variables were dropped as predictors: x1, x4, x10, x15, x18, x24, x30,x38, x41, x55, x63, x76, x78.
+
+Unfortunately, even dropping these highly correlated variables does not allow
+us to compute VIF within R. As such, we turn to the 'alias' function to find
+which variables are considered to be linearly dependent. These will be removed
+and the model re-run.
+
+```{r}
+# Remove highly correlated variables from the predictor list
+x_reduced = subset(x_variables, select=-c(x8, x13, x27, x66, x1, x4, x10, x15,
+                                          x18, x24, x30,x38, x41, x55, x63, x76, 
+                                          x78))
+# Bind a column with the target variable "overall grad rate"
+df <- cbind(x_reduced, y_variables['y1'])
+# Create a linear model object
+model <- lm(y1~., data=df)
+
+ld.vars <- attributes(alias(model)$Complete)$dimnames[[1]]
+ld.vars
+```
+
+```{r}
+# Remove additional linearly dependent variables.
+df <- subset(df, select=-c(x33,x34,x35,x39,x42,x43,x44,x46,x47,x48,x49,x50,x51,
+                           x52,x53,x54,x58,x61,x68,x69,x70,x72,x73,x74,x75,x77,
+                           x79,x80,x84,x86,x87,x36,x37,x40,x45,x56,x57,x59,x60,
+                           x62,x64,x65,x67,x71,x81,x82,x83,x85,x88))
+```
+
+
+```{r}
+# Remove categorical variables which are dependent on each other
+df <- subset(df, select=-c(x89,x90,x91))
+```
+
+```{r}
+
+model <- lm(y1~., data=df)
+
+# Create a correlation matrix
+corrplot(cor(df))
+
+# Create vector of VIF values
+vif_values <- vif(model)
+
+# Create horizontal bar chart to display each VIF value
+barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue",las=2, cex.names=.5, log="x")
+
+# Add vertical line at 5
+abline(v = 5, lwd = 3, lty = 2)
+```
+
+
+As can be seen in the plot of VIF values, there is massive multicollinearity in 
+play. This will have to be dealt with via principal component analysis.
+
+### Principal Component Analysis (PCA)
+
+```{r}
+
+#calculate principal components
+x_reduced <- subset(df, select=-c(y1))
+# Variables are scalled to a mean of zero and a SD of 1
+results <- prcomp(x_reduced, scale = TRUE)
+
+# Eigenvectors in R point in the negative direction by default, so we’ll 
+# multiply by -1 to reverse the signs.
+results$rotation <- -1*results$rotation
+
+# Display principal components
+results$rotation
+```
+Looking at these scores, it seems the first principal component (PC1) has 
+relatively high scores for x9 (*% Rural*), x12 (*Mobile homes as % of total 
+housing*), x16 (*Avg. household size for renters*), x19 (*% of homes valued 
+between $50,000 to $99,999*), x20 (*% of homes valued between $100,000 and 
+$149,999*), and x21 (*% of homes valued between $150,000 and $199,999*). This 
+should mean that PC1 describes the most variation in these variables.
+
+PC2 has the highest score for x17 (*% of homes with no vehicle*), which 
+indicates this principal component puts most of its emphasis on that variable.
+```{r}
+summary(results)
+```
+
+
+```{r}
+# Reverse the signs of the scores
+results$x <- -1*results$x
+
+# Calculate total variance explained by each principal component
+var_explained = results$sdev^2 / sum(results$sdev^2)
+
+var_explained
+```
+The first principal component explains 28.3% of the total variance in the 
+dataset, the second principal component explains 19.7% of the total variance in 
+the dataset, the third principal component explains 14.7% of the total variance
+in the dataset, the fourth principal component explains 9.4% of the total 
+variance in the dataset, the fifth component explains 5.4% of the total variance
+in the dataset, etc. 
+
+```{r}
+#create scree plot
+qplot(c(1:22), var_explained) + 
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab("Variance Explained") +
+  ggtitle("Scree Plot") +
+  ylim(0, .3)
+```
+```{r}
+
+set.seed(7)
+
+
+model_pca <- pls::pcr(y1~., data=df, scale=TRUE, validation="CV")
+summary(model_pca)
+
+```
+
+```{r}
+validationplot(model_pca)
+validationplot(model_pca, val.type="MSEP")
+pls::validationplot(model_pca, val.type="R2")
+```
+```{r}
+#Use 70% of dataset as training set and remaining 30% as testing set 
+set.seed(7)
+
+split1<- sample(c(rep(0, 0.7 * nrow(df)), rep(1, 0.3 * nrow(df))))
+train <- df[split1 == 0, ]  
+test <- df[split1== 1, ]    
+y_test <- subset(test, select=c(y1))
+test <- subset(test, select=-c(y1))
+```
+```{r}
+# Use model to make predictions on a test set
+# 2 Principal Component Case
+# By setting the parameter scale equal to TRUE the data is standardized before 
+# running the pcr algorithm on it. You can also perform validation by setting 
+# the argument validation. In this case I chose to perform 10 fold 
+# cross-validation and therefore set the validation argument to “CV”.
+
+model <- pcr(y1~., data=train, scale=TRUE, validation="CV")
+pcr_pred <- predict(model, test, ncomp=2)
+
+#calculate RMSE
+RMSE <- cbind(y_test, round(pcr_pred,4))
+RMSE['SqDiff'] <- (-RMSE['y1'] + RMSE['y1.2 comps'])^2
+Model_RMSE <- sqrt(mean(RMSE$SqDiff))
+Model_RMSE
+# Calculate adjusted R2
+R2 <- 0.0717
+adj_r2 <- 1-(1-R2)*(74-1)/(74-2-1)
+adj_r2
+# Note that it is possible to get a negative R-square for equations that do # not contain a constant term. Because R-square is defined as the proportion # of variance explained by the fit, if the fit is actually worse than just
+# fitting a horizontal line then R-square is negative. In this case,
+# R-square cannot be interpreted as the square of a correlation. Such
+# situations indicate that a constant term should be added to the model.
+
+```
+
+```{r}
+# Use model to make predictions on a test set
+# 12 Principal Component Case
+model <- pcr(y1~., data=train, scale=TRUE, validation="CV")
+pcr_pred <- predict(model, test, ncomp=12)
+
+#calculate RMSE
+RMSE <- cbind(y_test, round(pcr_pred,4))
+RMSE['SqDiff'] <- (-RMSE['y1'] + RMSE['y1.12 comps'])^2
+Model_RMSE <- sqrt(mean(RMSE$SqDiff))
+Model_RMSE
+# Calculate adjusted R2
+R2 <- 0.329
+adj_r2 <- 1-(1-R2)*(74-1)/(74-12-1)
+adj_r2
+```
+```{r}
+# Use model to make predictions on a test set
+# 16 Principal Component Case
+model <- pcr(y1~., data=train, scale=TRUE, validation="CV")
+pcr_pred <- predict(model, test, ncomp=16)
+
+#calculate RMSE
+RMSE <- cbind(y_test, round(pcr_pred,4))
+RMSE['SqDiff'] <- (-RMSE['y1'] + RMSE['y1.16 comps'])^2
+Model_RMSE <- sqrt(mean(RMSE$SqDiff))
+Model_RMSE
+# Calculate adjusted R2
+R2 <- 0.3674
+adj_r2 <- 1-((1-R2)*(74-1)/(74-16-1))
+adj_r2
+```
+### Random Forest
+
+```{r}
+library(caret)
+
+# Create the forest
+
+# By using the 'rf' method in caret, we also incorporate a lasso model
+# for variable selection. Though not absolutely necessary, cross-validation
+# is used here with 10-folds.
+
+set.seed(7)
+ctrl <- trainControl(
+  method = "cv",
+  number = 10,
+)
+
+# Train the random forest on the reduced variable dataset
+rf <- train(
+   y1 ~ .,
+   data = train,
+   method = 'rf',
+   preProcess = c("center", "scale"),
+   trControl = ctrl
+   )
+summary(rf)
+```
+```{r}
+rf_pred <- predict(rf, newdata = test)
+
+# RMSE
+RMSE <- cbind(y_test, round(rf_pred,4))
+RMSE['SqDiff'] <- (-RMSE['y1'] + RMSE[,c(2)])^2
+Model_RMSE <- sqrt(mean(RMSE$SqDiff))
+Model_RMSE
+R2 <- 0.4681217
+n <- 74
+p <- 1
+adjR2 <- 1-(1-R2)*(n-1)/(n-p-1)
+adjR2
+```
+```{r}
+# Checking variable importance
+varImp(rf)
+# Plot of variable importance
+plot(varImp(rf), main = "Random Forest - Variable Importance")
+```
+
+```{r}
+# Create a random forest using all the original predictors
+
+rf_large = cbind(x_variables, y_variables['y1'])
+split2<- sample(c(rep(0, 0.7 * nrow(rf_large)), rep(1, 0.3 * nrow(rf_large))))
+train_rf <- rf_large[split1 == 0, ]  
+test_rf <- rf_large[split1== 1, ]    
+y_rf <- subset(test_rf, select=c(y1))
+test_rf <- subset(test_rf, select=-c(y1))
+```
+```{r}
+set.seed(7)
+ctrl <- trainControl(
+  method = "cv",
+  number = 10,
+)
+# Create the forest
+# Again, by using the 'rf' method in caret, we also incorporate a lasso model
+rf2 <- train(
+   y1 ~ .,
+   data = train_rf,
+   method = 'rf',
+   preProcess = c("center", "scale"),
+   trControl = ctrl
+   )
+summary(rf2)
+```
+```{r}
+rf_pred <- predict(rf2, newdata = test_rf)
+
+# RMSE
+RMSE <- cbind(y_rf, round(rf_pred,4))
+RMSE['SqDiff'] <- (-RMSE['y1'] + RMSE[,c(2)])^2
+Model_RMSE <- sqrt(mean(RMSE$SqDiff))
+Model_RMSE
+# Calculate adjusted R2
+R2 <- 0.4654447 
+n <- 74
+p <- 1
+adjR2 <- 1-(1-R2)*(n-1)/(n-p-1)
+adjR2
+```
+```{r}
+# Checking variable importance
+varImp(rf2)
+# Plot of variable importance
+plot(varImp(rf2), main = "Random Forest - Variable Importance")
+```
+### Stepwise Factor Selection
+
+Though we have tried to address the issue of multicollinearity through PCA,
+which is a technique designed to accommodate highly correlated predictor 
+variables, it is worth looking at other common solutions. 
+
+A simple approach to try is simply to remove the correlated variables. This is 
+the quickest fix in most cases and is often an acceptable solution because the variables you’re removing are redundant anyway and add little unique or 
+independent information the model. 
+
+Forward selection and bidirectional elimination will be tried find a set of independent variables that significantly influence the dependent variable and,
+hopefully, are not highly correlated.
+
+```{r}
+# Forward stepwise 
+# Create a clean dataframe to work from
+set.seed(7)
+stepwise <- cbind(x_variables, y_variables['y1'])
+
+# Define intercept-only model
+intercept_only <- lm(y1~1, data=stepwise)
+
+# Define full model
+all <- lm(y1~., data=stepwise)
+
+# Perform forward stepwise regression
+forward <- step(intercept_only, direction='forward', scope=formula(all), trace=0)
+
+# View results of forward stepwise regression
+forward$anova
+
+# See final model
+forward$coefficients
+```
+```{r}
+# VIF on the linear regression model
+vif(forward)
+
+# Create vector of VIF values
+vif_values <- vif(forward)
+
+# Create horizontal bar chart to display each VIF value
+barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue",las=2, cex.names=.5, log="x")
+
+# Add vertical line at 5
+abline(v = 5, lwd = 3, lty = 2)
+```
+With VIF scores under 5, we now have acceptable levels of multicollinearity.
+```{r}
+#perform both-direction stepwise regression
+both <- step(intercept_only, direction='both', scope=formula(all), trace=0)
+
+#view results of backward stepwise regression
+both$anova
+
+#view final model
+both$coefficients
+```
+Both forward stepwise selection and bidirectional elimination approaches
+resulted in the same set of predictors. It would appear that this subset of
+predictors also elimates the multicollinearity problem and improves our R2
+for the model. However, this model was created using the entire dataset and 
+thus may be overfitted, so let us consider these predictors but use a 
+k-fold cross-validation approach.
+```{r}
+set.seed(7)
+
+# Set training control to cross-validation with 10 folds
+train_control <- trainControl(method = "cv", number = 10)
+
+# Create a data subset
+forward_df <- subset(stepwise, select=c(y1,x29,x66,x31,x86,x25,x60,x85,x53))
+
+# training the model by y1 as the target variable as a function of only
+# those variables identified by forward selection
+forward_cv<- train(y1~., data = forward_df,
+               method = "lm",
+               trControl = train_control)
+print(forward_cv)
+summary(forward_cv)
+# Create a correlation matrix
+corrplot(cor(forward_df))
+```
+
+
+
+
+
+
+
+
+
